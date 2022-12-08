@@ -1,0 +1,133 @@
+work_dir: /work/nonorm_results/CESM2_Picontrol_timelag=1_all_variables/
+ckpt_dir: /work/nonorm_results/CESM2_Picontrol_timelag=1_all_variables//checkpoints/
+log_dir: /work/nonorm_results/CESM2_Picontrol_timelag=1_all_variables//logs/
+print_config: true
+ignore_warnings: true
+test_after_training: false
+save_config_to_wandb: true
+verbose: true
+seed: 7
+name: nonorm_1h
+trainer:
+  _target_: pytorch_lightning.Trainer
+  gpus: -1
+  min_epochs: 1
+  max_epochs: 50
+  gradient_clip_val: 2.0
+  resume_from_checkpoint: null
+  precision: 32
+  num_sanity_val_steps: 0
+model:
+  _target_: aibedo.models.MLP.AIBEDO_MLP
+  hidden_dims:
+  - 1024
+  - 1024
+  - 1024
+  - 1024
+  net_normalization: layer_norm
+  activation_function: Gelu
+  dropout: 0.0
+  residual: true
+  monitor: val/mse
+  mode: min
+  window: 1
+  loss_weights:
+  - 0.333
+  - 0.333
+  - 0.333
+  physics_loss_weights:
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  month_as_feature: false
+  nonnegativity_at_train_time: true
+  use_auxiliary_vars: true
+  name: MLP
+  scheduler:
+    _target_: torch.optim.lr_scheduler.ExponentialLR
+    gamma: 0.98
+  lambda_physics2: null
+  lambda_physics3: null
+  lambda_physics4: null
+  lambda_physics5: null
+  optimizer:
+    name: adamw
+    lr: 0.0002
+    weight_decay: 1.0e-06
+    eps: 1.0e-08
+datamodule:
+  _target_: aibedo.datamodules.icosahedron_dm.IcosahedronDatamodule
+  order: 5
+  data_dir: /work/data/
+  input_filename: isosph5.nonorm.CESM2.piControl.r1i1p1f1.Input.Exp8.nc
+  input_vars:
+  - crelSurf_nonorm
+  - crel_nonorm
+  - cresSurf_nonorm
+  - cres_nonorm
+  - netTOAcs_nonorm
+  - lsMask
+  - netSurfcs_nonorm
+  output_vars:
+  - tas_nonorm
+  - ps_nonorm
+  - pr_nonorm
+  use_crel: true
+  use_crelSurf: true
+  use_cresSurf: true
+  partition:
+  - 0.85
+  - 0.15
+  - era5
+  time_lag: 1
+  prediction_data: same_as_test
+  batch_size: 10
+  eval_batch_size: 30
+  num_workers: 0
+  pin_memory: true
+  verbose: true
+  seed: 43
+callbacks:
+  model_checkpoint:
+    _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    monitor: val/mse
+    mode: min
+    save_top_k: 1
+    save_last: true
+    verbose: true
+    dirpath: /work/nonorm_results/CESM2_Picontrol_timelag=1_all_variables//checkpoints/120km6xz
+    filename: nonorm_1h_epoch{epoch:03d}_seed7
+    auto_insert_metric_name: false
+  early_stopping:
+    _target_: pytorch_lightning.callbacks.EarlyStopping
+    monitor: val/mse
+    mode: min
+    patience: 5
+    min_delta: 0
+logger:
+  wandb:
+    _target_: pytorch_lightning.loggers.wandb.WandbLogger
+    entity: aibedo-parc
+    name: nonorm_1h_MLP
+    tags:
+    - nonorm
+    - nonorm-inputs
+    - nonorm-outputs
+    - h=1
+    - order=5
+    - w=1
+    notes: '...'
+    project: AIBEDO_soo
+    group: MLPMLP_isosph5.nonorm.CESM2.piControl.r1i1p1f1.Input.Exp8.nc
+    resume: allow
+    reinit: true
+    mode: online
+    save_dir: /work/nonorm_results/CESM2_Picontrol_timelag=1_all_variables//
+    offline: false
+    id: 120km6xz
+    log_model: true
+    prefix: ''
+    job_type: train
+experiment_mode: true
