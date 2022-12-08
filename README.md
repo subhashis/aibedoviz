@@ -19,3 +19,6 @@ VA Features:
     - access tipping points risk from resulting MCB
     - record interesting MCB settings
 
+
+Environment:
+- conda create --name <env> --file requirements.txt
