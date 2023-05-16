@@ -114,6 +114,22 @@ def generate_perturbed_data(in_data, perturbations, invariables, lons, lats):
             print("-", var)
             where = np.where((in_data.lat > lat0) & (in_data.lat < lat1) & 
                              (in_data.lon > lon0) & (in_data.lon < lon1))
+            print("printing where ids:", where)
+            in_data['{0}'.format(var)][:,where[0]] += perturbations[var]
+            
+def generate_perturbed_data_freeform(in_data, perturbations, invariables, ff_pointids):
+    where = (np.array(ff_pointids),)
+    ### Perturb radiation fields
+    print("invar:", invariables)
+    print("perturb:", perturbations)
+    
+    for var in invariables:
+        print("#", var)
+        if var in perturbations:
+            print("-", var)
+            # where = np.where((in_data.lat > lat0) & (in_data.lat < lat1) & 
+            #                  (in_data.lon > lon0) & (in_data.lon < lon1))
+            print("printing where ids:", where)
             in_data['{0}'.format(var)][:,where[0]] += perturbations[var]
             
     

@@ -3,6 +3,7 @@ import numpy as np
 
 import os
 import sys
+import json
 
 path_aibedo = '/Users/shazarika/ProjectSpace/currentProjects/AiBEDO/codebase/11_07_22/aibedo/'
 sys.path.append(path_aibedo)
@@ -45,6 +46,13 @@ overrides = [f'datamodule.data_dir={DATA_DIR}', f"++model.use_auxiliary_vars=Fal
 output_ds_dict = {}
 output_ds_dict['CLEAN'] = clean_output_dataset(ds_output.sel(time=slice("1900-01-01","1900-01-01")))
 input_ds_dict = {}
+freeformType = 'lasso'
+freeformPointId = {}
+freeformPointId["MCB_pointId"] = []
+
+# colorscales
+named_colorscales = px.colors.named_colorscales()
+named_colorscales = ['RdBu_r', 'Turbo', 'Spectral_r'] + named_colorscales
 
 in_vars = [ 'crelSurf_nonorm', 'crel_nonorm', 'cresSurf_nonorm', 'cres_nonorm', 'netTOAcs_nonorm', 'lsMask', 'netSurfcs_nonorm']
 out_vars = ['tas_nonorm', 'pr_nonorm', 'ps_nonorm']
@@ -66,6 +74,22 @@ varname_dict = {
                     'ps_nonorm': 'Sea level pressure',
                     'tas_nonorm': '2-metre air temperature'
                 }
+
+reslevel_dict = {
+                    'L1' : 42,
+                    'L2' : 162,
+                    'L3' : 642,
+                    'L4' : 2562,
+                    'L5' : 10242
+}
+
+markersize_dict = {
+                    'L1' : 9,
+                    'L2' : 8,
+                    'L3' : 7,
+                    'L4' : 5,
+                    'L5' : 3
+}
 
 tp_region_defs = {
               'Sahel':{'lat':[10,20],'lon':[-15,35],'variable':['pr_nonorm'], 'trend':["increase"]},
@@ -91,10 +115,10 @@ dbc_css = (
 )
 
 app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc_css])
-app.title = "AiBEDO"
+app.title = "HAiVA"
 
-header = html.H1(
-    "AiBEDO", className="bg-dark text-white p-2 mb-2 text-center"
+header = html.H4(
+    "HAiVA : Hybrid AI-assisted Visual Anaysis Framework to Study Cloud-Climate Response ", className="bg-dark text-white p-2 mb-2 text-center"
 )
 description = html.H5(
     dcc.Markdown("A hybrid AI framework to capture the effects of cloud properties on global circulation and regional climate patterns"), className="text-black p-2 mb-2 text-center"
@@ -178,7 +202,7 @@ switch_mcb = daq.BooleanSwitch(
 dropdown_in_var = dcc.Dropdown(
                         id="in_varname",
                         options=[
-                            {"label": str(i), "value": i} for i in [ 'crelSurf_nonorm', 'crel_nonorm', 'cresSurf_nonorm', 'cres_nonorm', 'netTOAcs_nonorm', 'lsMask', 'netSurfcs_nonorm']
+                            {"label": str(i)[:-7], "value": i} for i in [ 'crelSurf_nonorm', 'crel_nonorm', 'cresSurf_nonorm', 'cres_nonorm', 'netTOAcs_nonorm', 'lsMask', 'netSurfcs_nonorm']
                         ],
                         value="crelSurf_nonorm",
                         clearable=False,
@@ -187,7 +211,7 @@ dropdown_in_var = dcc.Dropdown(
 dropdown_out_var =  dcc.Dropdown(
                         id="out_varname",
                         options=[
-                            {"label": str(i), "value": i} for i in ['pr_nonorm', 'ps_nonorm', 'tas_nonorm']
+                            {"label": str(i)[:-7], "value": i} for i in ['pr_nonorm', 'ps_nonorm', 'tas_nonorm']
                         ],
                         value="tas_nonorm",
                         clearable=False,
@@ -200,6 +224,15 @@ dropdown_tp_reg =  dcc.Dropdown(
                         value="Coral Sea",
                         clearable=False,
                     )
+dropdown_modellag = dcc.Dropdown(
+                        id="model_lag",
+                        options=[
+                            {"label": str(i), "value": i} for i in ['1-month', '2-months', '3-months', '4-months', '5-months', '6-months']
+                        ],
+                        value='1-month',
+                        clearable=False,
+                    )
+
 dropdown_timestep = dcc.Dropdown(
                         id="time_step",
                         options=[
@@ -226,6 +259,23 @@ dropdown_endtime = dcc.Dropdown(
                         clearable=False,
                     )
 
+dropdown_input_colorscale = dcc.Dropdown(
+                        id="input_cs",
+                        options=[
+                            {"label": str(i), "value": i} for i in named_colorscales
+                        ],
+                        value='Spectral_r',
+                        clearable=False,
+                    )
+dropdown_output_colorscale = dcc.Dropdown(
+                        id="output_cs",
+                        options=[
+                            {"label": str(i), "value": i} for i in named_colorscales
+                        ],
+                        value="RdBu_r",
+                        clearable=False,
+                    )
+
 dcc_timesteppicker = dcc.DatePickerSingle(
                 id='single_timestep_picker',
                 min_date_allowed=date(1850, 2, 1),
@@ -245,11 +295,20 @@ dropdown_projection = dcc.Dropdown(
 dropdown_zoneselect = dcc.Dropdown(
                         id="mcb_zone",
                         options=[
-                            {"label": str(i), "value": i} for i in ['NEP', 'SEA', 'SEP']
+                            {"label": str(i), "value": i} for i in ['NEP', 'SEA', 'SEP', 'freeform']
                         ],
                         value="SEP",
                         clearable=False,
                     )
+dropdown_res_level = dcc.Dropdown(
+                        id="res_level",
+                        options=[
+                            {"label": str(i), "value": i} for i in ['L1', 'L2', 'L3', 'L4', 'L5']
+                        ],
+                        value="L4",
+                        clearable=False,
+                    )
+
 dropdown_preturbvar = dcc.Dropdown(
                         id="perturb_var",
                         options=[{"label": str(i), "value": i} for i in [ 'crelSurf', 'crel', 'cresSurf', 'cres', 'netTOAcs', 'netSurfcs']],
@@ -267,7 +326,7 @@ buttongroup_whatif = dbc.ButtonGroup(
 button_mcb_initialize = dbc.Button("Initialize", id="init_mcb", color="primary",  size="sm",  outline=True,className="me-2")
 button_mcb_update = dbc.Button("Update", id="update_mcb", color="primary",  size="sm",  outline=True,className="me-2")
 
-button_refresh_tp = dbc.Button("TP Risk", id="refresh_tp", color="info",  size="sm",  outline=True,className="me-2")
+button_refresh_tp = dbc.Button("TP Risk", id="refresh_tp", color="primary",  size="sm",  outline=True,className="me-2")
 
 knob_whatif = daq.Knob(
                 #label="Perturbation Sigma",
@@ -373,13 +432,13 @@ table_mcb = dash_table.DataTable(
                 
             )
 table_button = html.Button('Add Row', id='editing-rows-button', n_clicks=0)
-button_table = dbc.Button("Save MCB settings", id="save_mcb_record", color="info",  size="sm",  outline=True,className="me-2")
+button_table = dbc.Button("Save MCB settings", id="save_mcb_record", color="primary",  size="sm",  outline=True,className="me-2")
 
 
 ##CONTROL PANELS
 control_panel1 = html.Div(
     [
-        html.H5(dcc.Markdown("**General Controls**")),
+        html.H5(dcc.Markdown("**General Settings**")),
         # html.Hr(),
         dbc.Row(
             [
@@ -406,19 +465,68 @@ control_panel1 = html.Div(
             align="center",
             className="g-0",
         ),
-        html.Hr(),
-        html.H5(dcc.Markdown("**Model Controls**")),
         
-        
-        dbc.Button("Run AiBEDO", id="run_model", color="primary", size="sm", outline=True,className="me-2"),
-        dbc.Button("Clear Data", id="clear_prediction", color="secondary", size="sm", outline=True,className="me-2"),
-        
-        #dbc.Button("Dark", color="dark", size="sm", outline=True),
-        
-        html.Hr(),
         dbc.Row(
             [
-                dbc.Col(html.H5(dcc.Markdown("**MCB Control**"))),
+                dbc.Col(html.H6("Resolution level"), md=5),
+                dbc.Col(dropdown_res_level,md=7),
+            ],
+            align="center",
+            className="g-0",
+        ),
+        html.Br(),
+        dbc.Row(
+            [
+                dbc.Col(html.H6("Input Colormap"), md=6),
+                dbc.Col(html.H6("Output Colormap"), md=6),
+                
+            ],
+            align="center",
+            className="g-0",
+        ),
+        dbc.Row(
+            [
+                dbc.Col(dropdown_input_colorscale,md=6),
+                dbc.Col(dropdown_output_colorscale,md=6),
+            ],
+            align="center",
+            className="g-0",
+        ),
+        html.Br(),
+        html.Hr(),
+        # html.Br(),
+        html.H5(dcc.Markdown("**Model Settings**")),
+        
+        dbc.Row(
+            [
+                dbc.Col(html.H6("Lag duration"), md=6),
+                dbc.Col(dropdown_modellag,md=6),
+                
+            ],
+            align="center",
+            className="g-0",
+        ),
+        html.Br(),
+        
+        dbc.Row(
+            [
+                
+                dbc.Col(dbc.Button("Run AiBEDO", id="run_model", color="primary", size="sm", outline=True,className="me-2"), md=6),
+                # dbc.Col(dbc.Button("Run HAiVA", id="run_model", color="primary", size="sm", outline=True,className="me-2"), md=6),
+                dbc.Col(dbc.Button("Clear Data", id="clear_prediction", color="secondary", size="sm", outline=True,className="me-2"),md=6),
+                
+            ],
+            align="center",
+            className="g-0",
+        ),
+        
+        #dbc.Button("Dark", color="dark", size="sm", outline=True),
+        html.Br(),
+        html.Hr(),
+        # html.Br(),
+        dbc.Row(
+            [
+                dbc.Col(html.H5(dcc.Markdown("**MCB Intervention**"))),
                 dbc.Col(switch_mcb, md=4),
             ]
         ),
@@ -481,6 +589,8 @@ control_panel1 = html.Div(
         dbc.Row(slider_netTOAcs, align="center", className="g-0 "),
         dbc.Row(slider_netSurfcs, align="center", className="g-0 "),
         
+        html.Br(),
+        
         dbc.Row(
             [
                  dbc.Col(button_mcb_update, md=3),
@@ -491,7 +601,10 @@ control_panel1 = html.Div(
             align="center",
             className="g-0",
         ),
-        html.Br(),
+        # html.Br(),
+        # html.Br(),
+        # html.Br(),
+        # html.Br(),
         # dbc.Row(dbc.Col(buttongroup_whatif)),
         # dbc.Row(
         #     [
@@ -522,12 +635,15 @@ control_panel2 = html.Div(
         dbc.Label(id='test-preturb-controls-update'),
         dbc.Label(id='test-preturb-controls-reset'),
         
+        html.Br(),
+        dbc.Label(id='test-selectedpoints'),
+        
     ],
     className="mb-1 p-1",
 )
 
 
-control1 = dbc.Card([control_panel1], body=True,)
+control1 = dbc.Card([control_panel1], style={'height': '93vh'}, body=True,)
 control2 = dbc.Card([control_panel2], body=True,)
 
 c1 = dbc.Card(
@@ -546,6 +662,7 @@ c1 = dbc.Card(
         dbc.Row(dbc.Col(dcc.Graph(id="input_panel"))),
         # html.Br(),
     ],
+    style={'height': '42vh'},
     body=True
     )
 c2 = dbc.Card(
@@ -555,7 +672,7 @@ c2 = dbc.Card(
                 dbc.Col(html.H6("Variable"), md=2),
                 dbc.Col(dropdown_out_var, md=2),
                 dbc.Col(html.H6(""), md=1),
-                dbc.Col(select_output_predict_view, md=7, align="center",className="g-0"),
+                dbc.Col(select_output_predict_view, md=7, align="center"),
                 # dbc.Col(html.H6("Model Prediction"), md=3),
                 # dbc.Col(switch_output_predict_view,md=1),
             ],
@@ -564,13 +681,14 @@ c2 = dbc.Card(
         ),
         dbc.Row(dbc.Col(dcc.Graph(id="output_panel"))),
         # html.Br(),
-    ], 
+    ],
+    style={'height': '42vh'}, 
     body=True,
     )
-c3 = dbc.Card([dcc.Graph(id="distribution_panel", config={'displayModeBar': False})], body=True)
-c_table = dbc.Card(html.Div([table_mcb], className="g-0"),body=True)
-c4 = dbc.Card([dcc.Graph(id="input_zone_panel"),html.Br(),html.Br(),], body=True)
-c5 = dbc.Card([dcc.Graph(id="error_stat_panel"),html.Br(),html.Br(),], body=True)
+c3 = dbc.Card([dcc.Graph(id="distribution_panel", config={'displayModeBar': False})], style={'height': '42vh'}, body=True)
+c_table = dbc.Card(html.Div([table_mcb], className="g-0"), style={'height': '42vh'}, body=True)
+c4 = dbc.Card([dcc.Graph(id="input_pcp")], style={'height': '42vh'}, body=True)
+c5 = dbc.Card([dcc.Graph(id="output_pcp")], style={'height': '42vh'}, body=True)
 c6 = dbc.Card(
         [
             dbc.Row(
@@ -581,6 +699,7 @@ c6 = dbc.Card(
                     [
                         dbc.Row(html.Div([dropdown_tp_reg] , className="g-0")),
                         dbc.Row(dcc.Graph(id="tp_chart")),
+                        dbc.Row(html.H6("")),
                     ],
                     width=4
                 ),
@@ -589,20 +708,21 @@ c6 = dbc.Card(
                 className="g-0",
             ),
         ],
+        style={'height': '42vh'},
         body=True
     )
 
 tabs1 = dbc.Tabs(
     [
         dbc.Tab(c1, label='Input View'),
-        dbc.Tab(c4, label="Zonal View"),
+        dbc.Tab(c4, label="Multivariate View"),
     ]
 )
 
 tabs2 = dbc.Tabs(
     [
         dbc.Tab(c2, label='Output View'),
-        dbc.Tab(c5, label="Error Statitics"),
+        dbc.Tab(c5, label="Multivariate View"),
     ]
 )
 
@@ -612,6 +732,7 @@ tabs3 = dbc.Tabs(
         dbc.Tab(c3, label="Distribution View"),
     ]
 )
+
 tabs4 = dbc.Tabs(
     [
         dbc.Tab(c6, label='Tipping Point Risk'),
@@ -622,7 +743,7 @@ tabs4 = dbc.Tabs(
 app.layout = dbc.Container(
     [
         dbc.Row(dbc.Col(header)),
-        dbc.Row(dbc.Col(description)),
+        # dbc.Row(dbc.Col(description)),
         
         dbc.Row(
             [
@@ -635,7 +756,7 @@ app.layout = dbc.Container(
                                 dbc.Col([tabs2], width=6),
                             ]
                             ),
-                        html.Br(),
+                        # html.Br(),
                         dbc.Row(
                             [
                                 dbc.Col([tabs3], width=4),
@@ -651,9 +772,11 @@ app.layout = dbc.Container(
             ]
         ),
         html.Br(),
+        html.Br(),
+        html.Br(),
         dbc.Row(
             [
-                dbc.Col([control2, ThemeChangerAIO(aio_id="theme", radio_props={"value":dbc.themes.YETI})], width=12),
+                dbc.Col([control2, ThemeChangerAIO(aio_id="theme", radio_props={"value":dbc.themes.ZEPHYR})], width=12),
                 # dbc.Col([tabs3], width=10),
             ]
         ),
@@ -666,18 +789,20 @@ app.layout = dbc.Container(
 @callback(
     Output("input_panel", "figure"),
     Input("input_projection", "value"),
+    Input("res_level", "value"),
     Input("in_varname", "value"),
     Input("time_step", "value"),
     # Input('single_timestep_picker', 'date'),
     Input("input_preturbation_switch", "on"),
+    Input("input_cs", "value"),
     Input(ThemeChangerAIO.ids.radio("theme"), "value"),
 )
-def update_input_panel(proj, varname, ts, preturb_switch, theme):
+def update_input_panel(proj, reslevel, varname, ts, preturb_switch, cm, theme):
     
-    resolution = 2562
+    resolution = reslevel_dict[reslevel]
     
     if preturb_switch and 'MCB' in input_ds_dict.keys():
-        # one corner-case not take case of (when preturb_switch is true but MCB is not there in the input_ds_dict)
+        # one corner-case not taken care of (when preturb_switch is true but MCB is not there in the input_ds_dict)
         vardata_array = np.mean(input_ds_dict['MCB'][varname],axis=0).data[:resolution]
     else:
         mm, yyyy = ts_2_mmyyyy(ts)
@@ -689,9 +814,6 @@ def update_input_panel(proj, varname, ts, preturb_switch, theme):
             print("[WARNING]: The MCB input dataset in not initalized!")
             
     
-    
-    #print(timeslice)
-    #varname = 'netSurfcs_nonorm'
 
     lon_list = ds_input.lon.data[:resolution]
     lat_list = ds_input.lat.data[:resolution]
@@ -706,24 +828,127 @@ def update_input_panel(proj, varname, ts, preturb_switch, theme):
                      color=varname, # which column to use to set the color of markers
                      #hover_name="val1", # column added to hover information
                      size="m_size",
-                     size_max=5, # size of markers
+                     size_max=markersize_dict[reslevel], # size of markers
                      projection=proj,
-                     color_continuous_scale='Turbo',
+                     color_continuous_scale=cm,
                      basemap_visible=True,
                      template=template_from_url(theme))
     
-    fig.update_layout(title_text=varname_dict[varname] , title_x=0.45, )
+    fig.update_layout(title_text=varname_dict[varname] , title_x=0.45, hovermode=False)
     fig.update_layout(coloraxis_colorbar=dict(
         title=None,
         len=0.5,
         # xanchor="right", #x=1,
         # yanchor='top', #y=0.1,
         thickness=15,
-        
+
     ))
+    
+    fig.update_layout(clickmode='event+select')
     
 
     return fig
+
+@callback(
+    Output("test-selectedpoints", "children"),
+    Input('input_panel', 'selectedData')
+)
+def update_selection(selectedData ):
+    
+    print("\nfreeformPointId:", freeformPointId)
+    # print("SELECTED DATA: ", selectedData)
+    if selectedData != None:
+        if len(selectedData) > 1:
+            print("selectedData len:", len(selectedData))
+            print("selectedData len:", selectedData.keys())
+            pointid_list = [i['pointIndex'] for i in selectedData['points']]
+            print("current selectedData point id:", pointid_list)
+            # freeformPointId += pointid_list
+            freeformPointId["MCB_pointId"] = pointid_list
+            #print(selectedData['lassoPoints']['geo'])
+    else:
+        print("No freeform selection made!")
+        freeformPointId["MCB_pointId"] = []
+    
+    print("updated freeformPointId:", freeformPointId)
+    
+    return json.dumps(selectedData, indent=2)
+
+
+@callback(
+    Output("input_pcp", "figure"),
+    Input("in_varname", "value"),
+    Input("time_step", "value"),
+    Input("input_preturbation_switch", "on"),
+    Input("input_cs", "value"),
+    Input(ThemeChangerAIO.ids.radio("theme"), "value"),
+)
+def update_input_pcp(varname, ts, preturb_switch, cm, theme):
+    resolution = reslevel_dict['L3']
+    in_var_pcp = [ 'crelSurf_nonorm', 'crel_nonorm', 'cresSurf_nonorm', 'cres_nonorm', 'netTOAcs_nonorm', 'netSurfcs_nonorm']
+    in_var_pcp_v1 = [ 'crelSurf', 'crel', 'cresSurf', 'cres', 'netTOAcs', 'netSurfcs']
+    var_data_list = []
+    
+    if preturb_switch and 'MCB' in input_ds_dict.keys():
+        # one corner-case not taken care of (when preturb_switch is true but MCB is not there in the input_ds_dict)
+        for v in in_var_pcp:
+            vardata_array = np.mean(input_ds_dict['MCB'][v],axis=0).data[:resolution]
+            var_data_list.append(vardata_array)
+    else:
+        mm, yyyy = ts_2_mmyyyy(ts)
+        ts_string = str(yyyy) + "-" + f"{mm:02}" + "-01"
+        timeslice = slice(ts_string,ts_string)
+        for v in in_var_pcp:
+            vardata_array = ds_input.sel(time=timeslice)[v][0][:resolution].data
+            var_data_list.append(vardata_array)
+        if preturb_switch:
+            # temp solution the corner case
+            print("[WARNING]: The MCB input dataset in not initalized!")
+            
+    
+    
+    #print(timeslice)
+    #varname = 'netSurfcs_nonorm'
+
+    lon_list = ds_input.lon.data[:resolution]
+    lat_list = ds_input.lat.data[:resolution]
+    column_name = ['lat', 'lon'] + in_var_pcp_v1
+
+    local_df = pd.DataFrame(data = np.vstack((lat_list, lon_list, var_data_list[0], var_data_list[1], var_data_list[2], var_data_list[3],
+                                              var_data_list[4], var_data_list[5])).T, columns = column_name)
+        
+    fig = px.parallel_coordinates(local_df, color=varname[:-7],
+                              color_continuous_scale=cm,
+                              template=template_from_url(theme))
+    
+    # fig = px.scatter_geo(local_df, lat="lat", lon="lon",
+    #                  color=varname, # which column to use to set the color of markers
+    #                  #hover_name="val1", # column added to hover information
+    #                  size="m_size",
+    #                  size_max=markersize_dict['L3'], # size of markers
+    #                  projection=proj,
+    #                  color_continuous_scale='Turbo',
+    #                  basemap_visible=True,
+    #                  template=template_from_url(theme))
+    
+    # fig.update_layout(title_text=varname_dict[varname] , title_x=0.45, )
+    fig.update_layout(coloraxis_colorbar=dict(
+        title=varname[:-7],
+        len=0.5,
+        # xanchor="right", #x=1,
+        # yanchor='top', #y=0.1,
+        thickness=15,
+
+    ))
+    fig.update_coloraxes(colorbar_title_font_size=10)
+    # fig.update_layout(clickmode='event+select')
+    fig.update_layout(margin=dict(l=50, r=50, t=70, b=50))
+    
+
+    return fig
+
+    
+
 
 @callback(
     Output("distribution_panel", "figure"),
@@ -746,7 +971,7 @@ def update_distribution_view(varname, ts, perturb_view, theme):
         
     ood_transformed = pca.transform(ood_test_data)
     ood_ll = pca.score_samples(ood_test_data)
-    ood_labels = ["ll:" + "{:.2f}".format(s) for s in ood_ll]
+    ood_labels = ["LL:" + "{:.2f}".format(s) for s in ood_ll]
         
     
     # perturb_data = perturbed_SEP[vname][:,:642].data
@@ -763,6 +988,7 @@ def update_distribution_view(varname, ts, perturb_view, theme):
             colorscale = 'Blues',
             xaxis = 'x',
             yaxis = 'y',
+            hoverinfo='skip'
         ))
     fig.add_trace(go.Scatter(
             x = transformed_data[:,0],
@@ -774,6 +1000,7 @@ def update_distribution_view(varname, ts, perturb_view, theme):
                 color = 'rgba(0,0,0,0.1)',
                 size = 2
             ),
+            hoverinfo='skip',
             name="original"
         ))
     fig.add_trace(go.Scatter(
@@ -806,14 +1033,16 @@ def update_distribution_view(varname, ts, perturb_view, theme):
 @callback(
     Output("output_panel", "figure"),
     Input("input_projection", "value"),
+    Input("res_level", "value"),
     Input("out_varname", "value"),
     Input("time_step", "value"),
     # Input("out_switch", "on"),
     Input("out_radio", "value"),
     State('mcb_switch_id', 'on'),
+    Input("output_cs", "value"),
     Input(ThemeChangerAIO.ids.radio("theme"), "value"),
 )
-def update_output_panel(proj, varname, ts, radio_select, mcb, theme):
+def update_output_panel(proj, reslevel, varname, ts, radio_select, mcb, cm, theme):
     
     # if show_pred:
     #     local_df = prediction_df
@@ -822,7 +1051,7 @@ def update_output_panel(proj, varname, ts, radio_select, mcb, theme):
     #     local_df[varname] = output_ds[varname][ts].data
     
     print("radio value =", radio_select)
-    resolution = 2562
+    resolution = reslevel_dict[reslevel]
     print("out data dict keys:", output_ds_dict.keys())
     custom_range = None
     
@@ -862,9 +1091,9 @@ def update_output_panel(proj, varname, ts, radio_select, mcb, theme):
                      color=varname, # which column to use to set the color of markers
                      #hover_name="val1", # column added to hover information
                      size="m_size",
-                     size_max=5, # size of markers
+                     size_max=markersize_dict[reslevel], # size of markers
                      projection=proj,
-                     color_continuous_scale='RdBu_r',
+                     color_continuous_scale=cm,
                      basemap_visible=True,
                      range_color=custom_range,
                      template=template_from_url(theme))
@@ -872,7 +1101,7 @@ def update_output_panel(proj, varname, ts, radio_select, mcb, theme):
     # fig2.update_layout(legend=dict(
     #     orientation="v",
     # ))
-    fig2.update_layout(title_text=varname_dict[varname], title_x=0.45)
+    fig2.update_layout(title_text=varname_dict[varname], title_x=0.45, hovermode=False)
     fig2.update_layout(coloraxis_colorbar=dict(
         title=None,
         len=0.5,
@@ -883,6 +1112,84 @@ def update_output_panel(proj, varname, ts, radio_select, mcb, theme):
     ))
     
     return fig2
+
+@callback(
+    Output("output_pcp", "figure"),
+    Input("out_varname", "value"),
+    Input("time_step", "value"),
+    Input("out_radio", "value"),
+    State('mcb_switch_id', 'on'),
+    Input("output_cs", "value"),
+    Input(ThemeChangerAIO.ids.radio("theme"), "value"),
+)
+def update_output_pcp(varname, ts, radio_select, mcb, cm, theme):
+    
+    # if show_pred:
+    #     local_df = prediction_df
+    # else:
+    #     local_df = location_df.copy()
+    #     local_df[varname] = output_ds[varname][ts].data
+    
+    print("radio value =", radio_select)
+    resolution = reslevel_dict['L3']
+    print("out data dict keys:", output_ds_dict.keys())
+    custom_range = None
+    
+    
+    
+    out_vars_v1 = ['tas', 'pr', 'ps']
+    
+    var_data_list = []
+    for v in out_vars:
+        local_ds = output_ds_dict['CLEAN']
+        vardata_array = local_ds[v][0][:resolution].data
+        if radio_select == 'current':
+            if 'BASE_PREDICTION' in output_ds_dict.keys():
+                local_ds = output_ds_dict['BASE_PREDICTION']
+                vardata_array = local_ds[v][0][:resolution].data
+        elif radio_select == 'before_mcb' and mcb:
+            if 'BASE_MCB_PREDICTION' in output_ds_dict.keys():
+                local_ds = output_ds_dict['BASE_MCB_PREDICTION']
+                vardata_array = np.mean(output_ds_dict['BASE_MCB_PREDICTION'][v],axis=0).data[:resolution]
+        elif radio_select == 'after_mcb' and mcb:
+            if 'PERTURB_MCB_PREDICTION' in output_ds_dict.keys():
+                local_ds = output_ds_dict['PERTURB_MCB_PREDICTION']
+                vardata_array = np.mean(output_ds_dict['PERTURB_MCB_PREDICTION'][v],axis=0).data[:resolution]
+        elif radio_select == 'diff' and mcb:
+            if 'BASE_MCB_PREDICTION' in output_ds_dict.keys() and 'PERTURB_MCB_PREDICTION' in output_ds_dict.keys():
+                local_ds = output_ds_dict['PERTURB_MCB_PREDICTION']
+                vardata_array = np.mean(output_ds_dict['PERTURB_MCB_PREDICTION'][v],axis=0).data[:resolution] - \
+                    np.mean(output_ds_dict['BASE_MCB_PREDICTION'][v],axis=0).data[:resolution]
+                custom_range = [-0.1,0.1]
+        var_data_list.append(vardata_array)
+    
+    
+    
+    lon_list = local_ds.lon.data[:resolution]
+    lat_list = local_ds.lat.data[:resolution]
+    column_name = ['lat', 'lon'] + out_vars_v1
+
+    local_df = pd.DataFrame(data = np.vstack((lat_list, lon_list, var_data_list[0], var_data_list[1], var_data_list[2])).T, columns = column_name)
+        
+    fig = px.parallel_coordinates(local_df, color=varname[:-7],
+                              color_continuous_scale=cm,
+                              template=template_from_url(theme))
+    
+    fig.update_layout(coloraxis_colorbar=dict(
+        title=varname[:-7],
+        len=0.5,
+        # xanchor="right", #x=1,
+        # yanchor='top', #y=0.1,
+        thickness=15,
+
+    ))
+    fig.update_coloraxes(colorbar_title_font_size=10)
+    # fig.update_layout(clickmode='event+select')
+    fig.update_layout(margin=dict(l=50, r=50, t=70, b=50))
+    
+
+    return fig
+
 
 @callback(
     Output('test-model-control', 'children'),
@@ -997,12 +1304,18 @@ def update_mcb_initialize(n_click, start_ts, end_ts, mcb, mcb_zone, perturb_var,
             
         print(perturbations)
         
-        print(mcb_regions[mcb_zone]['lats'])
-        print(mcb_regions[mcb_zone]['lons'])
+        print("MCB selection type:", mcb_zone)
         
+        if mcb_zone == 'freeform':
+            print("freeformPointId:", freeformPointId)
+            if len(freeformPointId["MCB_pointId"]) == 0:
+                return 'MCB not updated! (freeform selection not performed)'
+            generate_perturbed_data_freeform(input_ds_dict['MCB'], perturbations, in_vars, freeformPointId["MCB_pointId"])
+        else:
+            print("MCB_lat:", mcb_regions[mcb_zone]['lats'])
+            print("MCB_lon:", mcb_regions[mcb_zone]['lons'])
+            generate_perturbed_data(input_ds_dict['MCB'], perturbations, in_vars, mcb_regions[mcb_zone]['lons'], mcb_regions[mcb_zone]['lats'])
         
-        
-        generate_perturbed_data(input_ds_dict['MCB'], perturbations, in_vars, mcb_regions[mcb_zone]['lons'], mcb_regions[mcb_zone]['lats'])
         
         #sanity check of perturbation
         for v in in_vars:
@@ -1150,6 +1463,7 @@ def update_tp_chart(n_clicks, tp_reg, theme):
         # thickness=15,
         
     ))
+    # fig.update_layout(margin=dict(l=0, r=0, t=0, b=0))
     
 
     return fig
@@ -1179,25 +1493,41 @@ def add_row(n_clicks, rows, columns, start_ts, end_ts, mcb_zone, perturb_var, cr
         mm, yyyy = ts_2_mmyyyy(end_ts)
         end_ts_string = f"{mm:02}" +  "-" + str(yyyy)
         
-        temp_row = {
-                "mcb_id":str(n_clicks),
-                "start_time": start_ts_string,
-                "end_time": end_ts_string,
-                "lats": "{:.2f}".format(mcb_regions[mcb_zone]['lats'][0]) + ", " + "{:.2f}".format(mcb_regions[mcb_zone]['lats'][1]),
-                "lons": "{:.2f}".format(mcb_regions[mcb_zone]['lons'][0]) + ", " + "{:.2f}".format(mcb_regions[mcb_zone]['lons'][1]),
-                "crelSurf": "{:.2f}".format(crelSurf_val),
-                "crel": "{:.2f}".format(crel_val),
-                "cresSurf": "{:.2f}".format(cresSurf_val),
-                "cres": "{:.2f}".format(cres_val),
-                "netTOAcs": "{:.2f}".format(netTOAcs_val),
-                "netSurfcs": "{:.2f}".format(netSurfcs_val),
-                "comment": ""
-            }
+        if mcb_zone == "freeform":
+            temp_row = {
+                    "mcb_id":str(n_clicks),
+                    "start_time": start_ts_string,
+                    "end_time": end_ts_string,
+                    "lats": ','.join(map(str, freeformPointId["MCB_pointId"])),
+                    "lons": ','.join(map(str, freeformPointId["MCB_pointId"])),
+                    "crelSurf": "{:.2f}".format(crelSurf_val),
+                    "crel": "{:.2f}".format(crel_val),
+                    "cresSurf": "{:.2f}".format(cresSurf_val),
+                    "cres": "{:.2f}".format(cres_val),
+                    "netTOAcs": "{:.2f}".format(netTOAcs_val),
+                    "netSurfcs": "{:.2f}".format(netSurfcs_val),
+                    "comment": ""
+                }
+        else:
+            temp_row = {
+                    "mcb_id":str(n_clicks),
+                    "start_time": start_ts_string,
+                    "end_time": end_ts_string,
+                    "lats": "{:.2f}".format(mcb_regions[mcb_zone]['lats'][0]) + ", " + "{:.2f}".format(mcb_regions[mcb_zone]['lats'][1]),
+                    "lons": "{:.2f}".format(mcb_regions[mcb_zone]['lons'][0]) + ", " + "{:.2f}".format(mcb_regions[mcb_zone]['lons'][1]),
+                    "crelSurf": "{:.2f}".format(crelSurf_val),
+                    "crel": "{:.2f}".format(crel_val),
+                    "cresSurf": "{:.2f}".format(cresSurf_val),
+                    "cres": "{:.2f}".format(cres_val),
+                    "netTOAcs": "{:.2f}".format(netTOAcs_val),
+                    "netSurfcs": "{:.2f}".format(netSurfcs_val),
+                    "comment": ""
+                }
         rows.append(temp_row)
     return rows
     
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True)
+    app.run_server(debug=False)
 
